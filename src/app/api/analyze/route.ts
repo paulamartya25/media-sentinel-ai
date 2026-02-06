@@ -1,7 +1,9 @@
 ﻿import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Initialize Gemini with your API Key
+// Force Vercel to wait longer for Gemini response
+export const maxDuration = 60; 
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
@@ -13,7 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // Model configuration with MAX safety bypass
+    // Use Gemini 1.5 Flash for speed and lower latency
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
       safetySettings: [
@@ -24,27 +26,33 @@ export async function POST(req: Request) {
       ],
     });
 
-    // Convert image to base64
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString("base64");
 
-    // Calling Gemini API
     const result = await model.generateContent([
       "Analyze this media. If it is a meme, explain the joke. If it is a real photo, confirm its authenticity. Be very brief.",
-      { inlineData: { data: base64Data, mimeType: file.type } },
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: file.type,
+        },
+      },
     ]);
 
     const response = await result.response;
-    return NextResponse.json({ analysis: response.text() });
+    const text = response.text();
+
+    return NextResponse.json({ analysis: text });
 
   } catch (error: any) {
-    // Detailed error logging for Vercel
-    console.error("DEBUG ERROR:", error);
-    
+    // Detailed error logging for Vercel Logs
+    console.error("FULL ERROR LOG:", error);
+
     return NextResponse.json({ 
       error: "Analysis failed", 
-      message: error.message || "Unknown error",
-      code: error.status || "500" 
+      message: error.message || "Unknown error occurred",
+      // Adding stack trace for debugging if it still fails
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
     }, { status: 500 });
   }
 }
