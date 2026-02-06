@@ -1,7 +1,7 @@
 ﻿import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Force Vercel to wait longer for Gemini response
+// Sabse important line: Vercel ko 60 seconds tak wait karne pe majboor karega
 export const maxDuration = 60; 
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -11,11 +11,8 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
 
-    // Use Gemini 1.5 Flash for speed and lower latency
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
       safetySettings: [
@@ -29,30 +26,21 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString("base64");
 
+    // Timeout se bachne ke liye direct result handle kar rahe hain
     const result = await model.generateContent([
-      "Analyze this media. If it is a meme, explain the joke. If it is a real photo, confirm its authenticity. Be very brief.",
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: file.type,
-        },
-      },
+      "Analyze this. Be brief.",
+      { inlineData: { data: base64Data, mimeType: file.type } },
     ]);
 
     const response = await result.response;
-    const text = response.text();
-
-    return NextResponse.json({ analysis: text });
+    return NextResponse.json({ analysis: response.text() });
 
   } catch (error: any) {
-    // Detailed error logging for Vercel Logs
-    console.error("FULL ERROR LOG:", error);
-
+    console.error("DEBUG ERROR:", error);
+    // Taki screen pe asli error dikhe, "Analysis failed" nahi
     return NextResponse.json({ 
-      error: "Analysis failed", 
-      message: error.message || "Unknown error occurred",
-      // Adding stack trace for debugging if it still fails
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+      error: error.message || "Unknown error",
+      details: "Check Vercel Logs for full trace"
     }, { status: 500 });
   }
 }
